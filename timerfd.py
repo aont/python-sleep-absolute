@@ -35,7 +35,8 @@ def _create_timerfd():
         raise OSError("Failed to create timerfd")
     return fd
 
-def _set_timerfd_absolute(fd, target_time: _datetime.datetime):
+def _create_timerfd_absolute_time(target_time: _datetime.datetime):
+    fd = _create_timerfd()
     target_timestamp = target_time.timestamp()
     target_timestamp_modf = _math.modf(target_timestamp)
     nsec = int(target_timestamp_modf[0] * 1e9)
@@ -43,45 +44,39 @@ def _set_timerfd_absolute(fd, target_time: _datetime.datetime):
     new_value = _itimerspec(it_interval=_timespec(0, 0), it_value=_timespec(sec, nsec))
     if _timerfd_settime(fd, 1, _ctypes.byref(new_value), None) != 0:
         raise OSError("Failed to set timerfd")
+    return fd
 
-class Sleeper:
 
-    def __init__(self):
-        self._fd = None
-        # self._cancelled = False
-        self._event = _asyncio.Event()
-        self._event_wait_fut = _asyncio.Future()
-        self._loop = None
-
-    async def _wait_timerfd(self, fd, no_cancel_error):
-        self._loop = _asyncio.get_running_loop()
-        self._event.clear()
-        self._loop.add_reader(fd, self._event.set)
-        self._event_wait_fut = _asyncio.ensure_future(self._event.wait())
-        if no_cancel_error:
-            try:
-                await self._event_wait_fut
-            except _asyncio.CancelledError:
-                self._event_wait_fut = None
-                return
-        else:
-            await self._event_wait_fut
-        self._event_wait_fut = None
-        self._loop.remove_reader(fd)
+async def wait_until(target_time: _datetime.datetime):
+    fd = _create_timerfd_absolute_time(target_time)
+    loop = _asyncio.get_running_loop()
+    fut = _asyncio.Future()
+    loop.add_reader(fd, fut.set_result, None)
+    try:
+        await fut
+    except _asyncio.CancelledError as e:
+        raise e
+    finally:
+        # _sys.stderr.write("debug: finally\n")
+        loop.remove_reader(fd)
         _os.close(fd)
 
-    async def wait_until(self, target_time: _datetime.datetime, no_cancel_error: bool = False):
-        self._fd = _create_timerfd()
-        _set_timerfd_absolute(self._fd, target_time)
-        await self._wait_timerfd(self._fd, no_cancel_error)
-        self._fd = None
-        
-    async def cancel(self):
-        self._event.set()
-        if self._fd is not None:
-            self._loop.remove_reader(self._fd)
-            _os.close(self._fd)
-            self._fd = None
-        if self._event_wait_fut is not None:
-            self._event_wait_fut.cancel()
+async def _main():
+    import asyncio
+    import datetime
+    import sys
 
+    target = datetime.datetime.now() + datetime.timedelta(seconds=5)
+    sys.stderr.write(f"Waiting until {target} using 'timerfd' ...\n")
+
+    wait_until_fut = asyncio.ensure_future(wait_until(target))
+
+    asyncio.get_event_loop().call_later(1, wait_until_fut.cancel)
+
+    await wait_until_fut
+    sys.stderr.write(f"Woke up {datetime.datetime.now()}\n")
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(_main())
