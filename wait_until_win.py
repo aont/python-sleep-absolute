@@ -23,10 +23,10 @@ _CloseHandle = _kernel32.CloseHandle
 _CloseHandle.argtypes = [_wintypes.HANDLE]
 _CloseHandle.restype = _wintypes.BOOL
 
-
-async def wait_until(target_time: _datetime.datetime):
+def wait_until(target_time: _datetime.datetime, loop=None) -> _asyncio.Future:
     # ここでは pywin32 を使わず ctypes により Waitable Timer を利用します。
-    loop = _asyncio.get_running_loop()
+    if loop is None:
+        loop = _asyncio.get_running_loop()
     proactor: _asyncio.windows_events.IocpProactor = loop._proactor
     # ターゲット時刻をFILETIME形式（100ns単位、1601/1/1基準）に変換
     utc_target = target_time.astimezone(_datetime.timezone.utc)
@@ -44,23 +44,23 @@ async def wait_until(target_time: _datetime.datetime):
         _CloseHandle(timer)
         raise OSError(err, "Failed to set waitable timer")
 
-    # print(f"[ctypes-win32event] Waiting until {target_time} ...")
-    try:
-        await proactor.wait_for_handle(timer, None)
-    # print(f"[ctypes-win32event] Time reached at {_datetime._datetime.now()}")
-    finally:
-        # _sys.stderr.write(f"debug: finally\n")
-        _CloseHandle(timer)
-
+    fut = proactor.wait_for_handle(timer, None)
+    def cancel_callback(fut: _asyncio.Future):
+        if fut.cancelled():
+            # _sys.stderr.write("debug: cancel_callback\n")
+            # proactor.remove_waiter(timer)
+            _CloseHandle(timer)
+    fut.add_done_callback(cancel_callback)
+    return fut
 
 # --- デモ用 main() ---
 async def _main():
     # 利用例: 現在時刻から5秒後をターゲット
-    target = _datetime.datetime.now() + _datetime.timedelta(seconds=5)
+    target = _datetime.datetime.now() + _datetime.timedelta(seconds=2)
 
     print(f"Waiting until {target} using 'win32event' (ctypes) ...")
     fut = _asyncio.ensure_future(wait_until(target))
-    # _asyncio.get_event_loop().call_later(1, fut.cancel)
+    _asyncio.get_event_loop().call_later(1, fut.cancel)
     await fut
     print("Woke up (win32event)!")
 

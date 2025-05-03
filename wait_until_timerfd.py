@@ -46,27 +46,36 @@ def _create_timerfd_absolute_time(target_time: _datetime.datetime):
         raise OSError("Failed to set timerfd")
     return fd
 
-
-async def wait_until(target_time: _datetime.datetime):
+def wait_until(target_time: _datetime.datetime, loop=None) -> _asyncio.Future:
+    if loop is None: loop = _asyncio.get_event_loop()
     fd = _create_timerfd_absolute_time(target_time)
     loop = _asyncio.get_running_loop()
     fut = _asyncio.Future()
-    loop.add_reader(fd, fut.set_result, None)
-    try:
-        await fut
-    except _asyncio.CancelledError as e:
-        raise e
-    finally:
-        # _sys.stderr.write("debug: finally\n")
+
+    def on_ready():
+        if not fut.done():
+            fut.set_result(None)
         loop.remove_reader(fd)
         _os.close(fd)
+
+    loop.add_reader(fd, on_ready)
+
+    def cancel_callback(fut: _asyncio.Future):
+        if fut.cancelled():
+            _sys.stderr.write("debug: cancel_callback\n")
+            loop.remove_reader(fd)
+            _os.close(fd)
+
+    fut.add_done_callback(cancel_callback)
+    return fut
+
 
 async def _main():
     import asyncio
     import datetime
     import sys
 
-    target = datetime.datetime.now() + datetime.timedelta(seconds=5)
+    target = datetime.datetime.now() + datetime.timedelta(seconds=2)
     sys.stderr.write(f"Waiting until {target} using 'timerfd' ...\n")
 
     wait_until_fut = asyncio.ensure_future(wait_until(target))
@@ -75,7 +84,6 @@ async def _main():
 
     await wait_until_fut
     sys.stderr.write(f"Woke up {datetime.datetime.now()}\n")
-
 
 if __name__ == "__main__":
     import asyncio
