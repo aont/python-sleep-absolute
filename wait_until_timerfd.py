@@ -62,7 +62,7 @@ def wait_until(target_time: _datetime.datetime, loop=None) -> _asyncio.Future:
 
     def cancel_callback(fut: _asyncio.Future):
         if fut.cancelled():
-            _sys.stderr.write("debug: cancel_callback\n")
+            # _sys.stderr.write("debug: cancel_callback\n")
             loop.remove_reader(fd)
             _os.close(fd)
 
