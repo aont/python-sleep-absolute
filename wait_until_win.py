@@ -45,12 +45,11 @@ def wait_until(target_time: _datetime.datetime, loop=None) -> _asyncio.Future:
         raise OSError(err, "Failed to set waitable timer")
 
     fut = proactor.wait_for_handle(timer, None)
-    def cancel_callback(fut: _asyncio.Future):
-        if fut.cancelled():
-            # _sys.stderr.write("debug: cancel_callback\n")
-            # proactor.remove_waiter(timer)
-            _CloseHandle(timer)
-    fut.add_done_callback(cancel_callback)
+    def fut_done_callback(fut: _asyncio.Future):
+        # _sys.stderr.write("debug: cancel_callback\n")
+        # proactor.remove_waiter(timer)
+        _CloseHandle(timer)
+    fut.add_done_callback(fut_done_callback)
     return fut
 
 # --- デモ用 main() ---
