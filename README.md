@@ -10,7 +10,7 @@ The project is published as a source distribution and can be installed directly
 from GitHub:
 
 ```bash
-pip install git+https://github.com/<your-account>/python-sleep-absolute.git
+pip install git+https://github.com/aont/python-sleep-absolute.git
 ```
 
 Replace `<your-account>` with the name of the GitHub organisation or user that
