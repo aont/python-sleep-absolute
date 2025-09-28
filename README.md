@@ -16,6 +16,20 @@ pip install git+https://github.com/aont/python-sleep-absolute.git
 Replace `<your-account>` with the name of the GitHub organisation or user that
 hosts the repository.
 
+## Python compatibility
+
+The package supports Python 3.9 and newer.  The test-suite is regularly run on
+CPython 3.9 through 3.12 to ensure continued compatibility.
+
+## Running the tests
+
+When working on the project locally, set ``PYTHONPATH`` so the package can be
+imported from the ``src`` layout:
+
+```bash
+PYTHONPATH=src python -m unittest discover -s tests
+```
+
 ## Usage
 
 ```python
