@@ -7,6 +7,7 @@ import datetime as _datetime
 import math as _math
 import os as _os
 import ctypes as _ctypes
+import errno as _errno
 
 __all__ = ["wait_until"]
 
@@ -85,11 +86,26 @@ def wait_until(
     if add_reader is None or remove_reader is None:
         raise RuntimeError("Event loop does not support file descriptor callbacks")
 
-    fd = _create_timerfd()
+    try:
+        fd = _create_timerfd()
+    except OSError as exc:
+        if exc.errno in (_errno.ENOSYS, _errno.ENODEV, _errno.EINVAL):
+            from . import _timer_create as _fallback  # local import to avoid cycles
+
+            return _fallback.wait_until(target_time, loop=loop)
+        raise
     try:
         _program_timerfd(fd, target_time)
-    except Exception:
+    except Exception as exc:
         _os.close(fd)
+        if isinstance(exc, OSError) and exc.errno in (
+            _errno.ENOSYS,
+            _errno.ENODEV,
+            _errno.EINVAL,
+        ):
+            from . import _timer_create as _fallback  # local import to avoid cycles
+
+            return _fallback.wait_until(target_time, loop=loop)
         raise
 
     future = loop.create_future()

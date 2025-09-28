@@ -1,9 +1,9 @@
 """Async utilities to wait until an absolute timestamp.
 
 The :func:`wait_until` helper selects the optimal implementation for the
-current platform.  On Linux it uses ``timerfd`` via :mod:`ctypes`, while on
-Windows it relies on waitable timers.  Other platforms are currently not
-supported.
+current platform.  On Linux it uses ``timerfd`` via :mod:`ctypes`, falling back
+to POSIX timers (``timer_create``/``timer_settime``) when necessary.  Windows
+relies on waitable timers.  Other platforms are currently not supported.
 """
 from __future__ import annotations
 
@@ -16,9 +16,17 @@ __all__ = ["wait_until", "__version__"]
 __version__ = "0.1.0"
 
 if _sys.platform.startswith("linux"):
-    from . import _linux as _impl
+    try:
+        from . import _linux as _impl
+    except (AttributeError, OSError):
+        from . import _timer_create as _impl
 elif _sys.platform.startswith(("win32", "cygwin")):
     from . import _windows as _impl  # pragma: no cover - platform specific
+elif _sys.platform.startswith(("freebsd", "netbsd", "openbsd")):
+    try:
+        from . import _timer_create as _impl
+    except (AttributeError, OSError):
+        _impl = None
 else:  # pragma: no cover - platform specific
     _impl = None
 
