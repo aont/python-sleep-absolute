@@ -54,6 +54,16 @@ class TimerCreateTests(unittest.IsolatedAsyncioTestCase):
             await fut
         self.assertTrue(fut.cancelled())
 
+    async def test_cancellation_releases_native_timer(self) -> None:
+        target = datetime.datetime.now() + datetime.timedelta(seconds=1)
+        fut = _posix_impl.wait_until(target)
+        self.assertGreaterEqual(len(_posix_impl._contexts), 1)
+        fut.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await fut
+        await asyncio.sleep(0)
+        self.assertEqual(len(_posix_impl._contexts), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

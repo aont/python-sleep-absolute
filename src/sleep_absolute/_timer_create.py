@@ -7,6 +7,7 @@ import datetime as _datetime
 import math as _math
 import ctypes as _ctypes
 import ctypes.util as _ctypes_util
+import errno as _errno
 
 __all__ = ["wait_until"]
 
@@ -151,6 +152,31 @@ class _TimerContext:
             self.cleanup()
             raise OSError(err, "Failed to set POSIX timer")
 
+    def cancel_timer(self) -> None:
+        if self._closed:
+            return
+        timer_id = self.timer_id
+        if not timer_id or not timer_id.value:
+            return
+
+        zero_spec = _Itimerspec(
+            it_interval=_Timespec(0, 0),
+            it_value=_Timespec(0, 0),
+        )
+        result = _timer_settime(timer_id, 0, _ctypes.byref(zero_spec), None)
+        if result != 0:
+            err = _ctypes.get_errno()
+            if err in (_errno.EINVAL, _errno.ENOENT):
+                return
+            exc = OSError(err, "Failed to disarm POSIX timer")
+            self.loop.call_exception_handler(
+                {
+                    "message": "sleep_absolute._timer_create failed to disarm timer",
+                    "exception": exc,
+                    "timer_id": timer_id,
+                }
+            )
+
     def _resolve(self) -> None:
         if self._closed:
             return
@@ -196,11 +222,17 @@ def wait_until(
     try:
         context.start(target_time)
     except Exception:
-        context.cleanup()
+        try:
+            context.cancel_timer()
+        finally:
+            context.cleanup()
         raise
 
     def _on_done(_fut: _asyncio.Future) -> None:
-        context.cleanup()
+        try:
+            context.cancel_timer()
+        finally:
+            context.cleanup()
 
     future.add_done_callback(_on_done)
     return future
