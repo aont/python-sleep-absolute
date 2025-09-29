@@ -20,6 +20,8 @@ if _sys.platform.startswith("linux"):
         from . import _linux as _impl
     except (AttributeError, OSError):
         from . import _timer_create as _impl
+elif _sys.platform.startswith("darwin"):
+    from . import _darwin as _impl  # pragma: no cover - platform specific
 elif _sys.platform.startswith(("win32", "cygwin")):
     from . import _windows as _impl  # pragma: no cover - platform specific
 elif _sys.platform.startswith(("freebsd", "netbsd", "openbsd")):
